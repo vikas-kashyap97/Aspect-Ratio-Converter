@@ -35,7 +35,17 @@ uploaded = st.file_uploader("📤 Upload a 16:9 video", type=["mp4", "mov", "mkv
 
 if uploaded:
     st.video(uploaded)
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+    
+    # Extract original filename (without extension)
+    original_filename = uploaded.name
+    original_name = Path(original_filename).stem
+    original_ext = Path(original_filename).suffix
+    
+    # Display the detected filename
+    st.info(f"📁 Uploaded file: **{original_filename}**")
+    
+    # Save uploaded file temporarily
+    with tempfile.NamedTemporaryFile(delete=False, suffix=original_ext) as tmp:
         tmp.write(uploaded.read())
         input_path = tmp.name
 
@@ -55,7 +65,17 @@ if uploaded:
     method = st.radio("Choose conversion style:", ["Letterbox", "Crop", "Zoom"], horizontal=True)
     quality = st.select_slider("Select Quality", ["low", "medium", "high"], value="high")
     crf = {"low": 28, "medium": 23, "high": 18}[quality]
-    output_path = tempfile.mktemp(suffix="_9x16.mp4")
+    
+    # Create output filename - sanitize special characters that might cause issues
+    safe_name = original_name.replace("|", "-").replace("/", "-").replace("\\", "-")
+    output_filename = f"{safe_name}_9x16.mp4"
+    
+    # Show what the output filename will be
+    st.info(f"💾 Output file will be named: **{output_filename}**")
+    
+    # Create output path
+    temp_dir = tempfile.gettempdir()
+    output_path = os.path.join(temp_dir, output_filename)
 
     # ---- Conversion ----
     if st.button("🚀 Convert Now", use_container_width=True):
@@ -98,22 +118,34 @@ if uploaded:
 
         if process.returncode == 0:
             st.success(f"✅ Conversion completed in {elapsed:.1f} seconds!")
+            st.write(f"🎬 Output file created at: `{output_path}`")
             st.video(output_path)
-            with open(output_path, "rb") as f:
+            
+            # Read the converted file and provide download with explicit filename
+            try:
+                with open(output_path, "rb") as f:
+                    video_data = f.read()
+                
                 st.download_button(
-                    "⬇️ Download Converted Video",
-                    f,
-                    file_name="converted_9x16.mp4",
+                    label="⬇️ Download Converted Video",
+                    data=video_data,
+                    file_name=output_filename,
                     mime="video/mp4",
-                    use_container_width=True
+                    use_container_width=True,
+                    key="download_btn"
                 )
+                
+                st.success(f"✅ Click the button above to download as: **{output_filename}**")
+                
+            except Exception as e:
+                st.error(f"Error preparing download: {e}")
         else:
             st.error("❌ Conversion failed! Check your FFmpeg installation.")
             st.code(process.stderr)
 
-        # Cleanup temp files
+        # Cleanup temp files (after a delay to allow download)
         try:
-            os.remove(input_path)
-            os.remove(output_path)
+            # Don't delete immediately, wait for download
+            pass
         except:
             pass
